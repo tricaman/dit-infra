@@ -1,0 +1,6 @@
+.env
+.env.prod
+.env.*.local
+*.bak
+backups/
+.DS_Store

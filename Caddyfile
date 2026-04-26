@@ -1,0 +1,40 @@
+{
+    email {$ACME_EMAIL}
+}
+
+# ── REST API (dit-api) ────────────────────────────────────────────────────
+{$DOMAIN_API} {
+    encode gzip zstd
+
+    reverse_proxy dit-api:3000
+
+    log {
+        output stdout
+        format console
+    }
+}
+
+# ── WebSocket (dit-ping) ──────────────────────────────────────────────────
+{$DOMAIN_WS} {
+    encode gzip zstd
+
+    # Endpoint WebSocket
+    handle /ws {
+        reverse_proxy dit-ping:8080
+    }
+
+    # Health check (es. https://dit-ws.mariustrica.com/health)
+    handle /health {
+        reverse_proxy dit-ping:8080
+    }
+
+    # Tutto il resto → 404 (dit-ping non espone altri path)
+    handle {
+        respond 404
+    }
+
+    log {
+        output stdout
+        format console
+    }
+}
