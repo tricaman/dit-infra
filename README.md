@@ -72,6 +72,9 @@ ssh dit@<DROPLET_IP>
 ```bash
 sudo chown -R dit:dit /opt/dit
 git clone https://github.com/tricaman/dit-infra.git /opt/dit
+# Nota: dit-infra sta sotto user tricaman; i 3 repo applicativi (dit-api, dit-ping,
+# dit-notifications-worker) stanno sotto org Tricabit. Le immagini GHCR sono su
+# ghcr.io/tricabit/<repo> (lowercase obbligatorio nei path GHCR).
 cd /opt/dit
 cp .env.prod.example .env.prod
 nano .env.prod   # popola tutti i secret — vedi sezione "Variabili obbligatorie"
@@ -98,14 +101,17 @@ Nei provider OAuth registra le seguenti redirect URI (tutte sull'host di dit-api
 
 ## 5. Login a GHCR (per scaricare le immagini private)
 
-I tre repo applicativi pushano su GHCR via GitHub Actions (vedi sezione 8). Per scaricarle dal droplet ti serve un Personal Access Token con scope `read:packages`:
+I tre repo applicativi (sotto org `Tricabit`) pushano su GHCR via GitHub Actions (vedi sezione 8). Per scaricarle dal droplet ti serve un Personal Access Token con scope `read:packages`:
 
-1. https://github.com/settings/tokens → "Generate new token (classic)" → scope `read:packages` (e `repo` se i repo sono privati).
-2. Sul droplet:
+1. https://github.com/settings/tokens → "Generate new token (classic)" → scope `read:packages` (e `repo` se i package sono privati).
+2. Assicurati che il PAT abbia accesso all'org `Tricabit`: dopo crearlo, vai su https://github.com/settings/tokens, clicca sul token, sezione "Organization access" → "Configure SSO" → autorizza `Tricabit`.
+3. Sul droplet:
 
 ```bash
 echo "<PAT>" | docker login ghcr.io -u tricaman --password-stdin
 ```
+
+(L'username del login è il tuo user personale `tricaman`; il PAT include i permessi sull'org.)
 
 Il login persiste in `~/.docker/config.json`.
 
@@ -149,7 +155,9 @@ Ogni repo (`dit-api`, `dit-ping`, `dit-notifications-worker`) contiene un workfl
 
 - builda l'immagine Docker su push su `main` o tag `v*`;
 - la tagga `latest` + `sha-<short>` + `<version>` (se è un tag);
-- la pusha su `ghcr.io/${{ github.repository_owner }}/<repo-name>`.
+- la pusha su `ghcr.io/tricabit/<repo-name>` (`github.repository_owner` lowercase = `tricabit`).
+
+Al primo push, vai su https://github.com/orgs/Tricabit/packages, apri ogni package e "Package settings" → "Manage Actions access" verifica che il repo sorgente sia collegato. (Per repo privati il package eredita la visibilità dal repo ma il link va confermato la prima volta.)
 
 > **Nota:** affinché GHCR pubblichi pacchetti privati associati all'utente, dopo il primo push devi rendere il package "linked" al repo e (se vuoi) impostarlo a "private". Vedi: https://docs.github.com/en/packages/learn-github-packages/connecting-a-repository-to-a-package
 
