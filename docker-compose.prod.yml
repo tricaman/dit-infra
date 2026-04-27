@@ -74,6 +74,12 @@ services:
       MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET}
       MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON}
+      # Reviewer backdoor (Play Store / App Store review only).
+      # TODO(reviewer-backdoor): remove when Apple/Google no longer need a
+      # non-magic-link path. See dit-api/decisions.md.
+      REVIEWER_BACKDOOR_ENABLED: ${REVIEWER_BACKDOOR_ENABLED:-false}
+      REVIEWER_BACKDOOR_EMAILS: ${REVIEWER_BACKDOOR_EMAILS:-}
+      REVIEWER_BACKDOOR_OTP: ${REVIEWER_BACKDOOR_OTP:-}
     depends_on:
       postgres:
         condition: service_healthy
