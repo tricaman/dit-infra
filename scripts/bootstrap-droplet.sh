@@ -5,9 +5,14 @@
 #   ssh root@<DROPLET_IP> "bash -s" < scripts/bootstrap-droplet.sh
 set -euo pipefail
 
+# Evita prompt interattivi durante apt-get
+export DEBIAN_FRONTEND=noninteractive
+export NEEDRESTART_MODE=a
+export NEEDRESTART_SUSPEND=1
+
 echo "==> 1/6 Aggiornamento sistema"
 apt-get update -y
-apt-get upgrade -y
+apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade -y
 
 echo "==> 2/6 Installazione pacchetti base"
 apt-get install -y ca-certificates curl gnupg ufw git fail2ban
