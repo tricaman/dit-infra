@@ -25,13 +25,13 @@ case "$SERVICE" in
     echo "==> Migrazione database (Prisma)"
     ./scripts/migrate.sh
     echo "==> Restart dit-api"
-    $COMPOSE up -d --no-deps dit-api
+    $COMPOSE up -d --no-deps --force-recreate dit-api
     ;;
   dit-ping|dit-worker)
     echo "==> Pull $SERVICE"
     $COMPOSE pull "$SERVICE"
     echo "==> Restart $SERVICE"
-    $COMPOSE up -d --no-deps "$SERVICE"
+    $COMPOSE up -d --no-deps --force-recreate "$SERVICE"
     ;;
   "")
     echo "==> Pull immagini ultime (tutti i servizi)"
@@ -39,7 +39,7 @@ case "$SERVICE" in
     echo "==> Migrazione database (se necessaria)"
     ./scripts/migrate.sh
     echo "==> Restart servizi applicativi"
-    $COMPOSE up -d --no-deps dit-api dit-ping dit-worker
+    $COMPOSE up -d --no-deps --force-recreate dit-api dit-ping dit-worker
     ;;
   *)
     echo "ERRORE: servizio sconosciuto '$SERVICE'." >&2
