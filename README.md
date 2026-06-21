@@ -71,26 +71,26 @@ Volumes: pgdata, redis_data, caddy_data, caddy_config (named volumes Docker).
 
 ### Servizi
 
-| Servizio     | Immagine                                           | Esposizione                       | Volume        |
-| ------------ | -------------------------------------------------- | --------------------------------- | ------------- |
-| `caddy`      | `caddy:2-alpine`                                   | `:80`, `:443/tcp+udp`             | `caddy_data`  |
-| `dit-api`    | `ghcr.io/tricaman/dit-api:latest`                  | interno → Caddy                   | —             |
-| `dit-ping`   | `ghcr.io/tricaman/dit-ping:latest`                 | interno → Caddy (`/ws`)           | —             |
-| `dit-worker` | `ghcr.io/tricaman/dit-notifications-worker:latest` | interno (consumer Redis queue)    | —             |
-| `postgres`   | `postgres:16-alpine`                               | interno                           | `pgdata`      |
-| `redis`      | `redis:7-alpine` (`--appendonly yes`)              | interno                           | `redis_data`  |
+| Servizio     | Immagine                                           | Esposizione                    | Volume       |
+| ------------ | -------------------------------------------------- | ------------------------------ | ------------ |
+| `caddy`      | `caddy:2-alpine`                                   | `:80`, `:443/tcp+udp`          | `caddy_data` |
+| `dit-api`    | `ghcr.io/tricaman/dit-api:latest`                  | interno → Caddy                | —            |
+| `dit-ping`   | `ghcr.io/tricaman/dit-ping:latest`                 | interno → Caddy (`/ws`)        | —            |
+| `dit-worker` | `ghcr.io/tricaman/dit-notifications-worker:latest` | interno (consumer Redis queue) | —            |
+| `postgres`   | `postgres:16-alpine`                               | interno                        | `pgdata`     |
+| `redis`      | `redis:7-alpine` (`--appendonly yes`)              | interno                        | `redis_data` |
 
 ---
 
 ## Endpoint pubblici
 
-| URL                                            | Servizio   | Note                                      |
-| ---------------------------------------------- | ---------- | ----------------------------------------- |
-| `https://dit-api.mariustrica.com/`             | dit-api    | Hello world (default NestJS)              |
-| `https://dit-api.mariustrica.com/docs`         | dit-api    | Swagger UI                                |
-| `https://dit-api.mariustrica.com/auth/...`     | dit-api    | BetterAuth (Google OAuth, email + OTP)    |
-| `https://dit-api.mariustrica.com/users/...`    | dit-api    | API REST                                  |
-| `wss://dit-ws.mariustrica.com/ws`              | dit-ping   | WebSocket (auth via JWT shared secret)    |
+| URL                                         | Servizio | Note                                   |
+| ------------------------------------------- | -------- | -------------------------------------- |
+| `https://dit-api.mariustrica.com/`          | dit-api  | Hello world (default NestJS)           |
+| `https://dit-api.mariustrica.com/docs`      | dit-api  | Swagger UI                             |
+| `https://dit-api.mariustrica.com/auth/...`  | dit-api  | BetterAuth (Google OAuth, email + OTP) |
+| `https://dit-api.mariustrica.com/users/...` | dit-api  | API REST                               |
+| `wss://dit-ws.mariustrica.com/ws`           | dit-ping | WebSocket (auth via JWT shared secret) |
 
 ### OAuth callback registrati
 
@@ -119,10 +119,10 @@ Le immagini GHCR del backend (api/ping/worker) sono **private**. Per pullarle da
 ### SSH al droplet
 
 ```bash
-ssh dit@165.22.30.42
+ssh dit@178.105.228.38
 ```
 
-L'utente `dit` è non-root, in gruppo `docker`. Tutti i comandi compose vanno lanciati da lui. Per cose di sistema (reboot, apt, ecc.) usa `ssh root@165.22.30.42`.
+L'utente `dit` è non-root, in gruppo `docker`. Tutti i comandi compose vanno lanciati da lui. Per cose di sistema (reboot, apt, ecc.) usa `ssh root@178.105.228.38`.
 
 ### Status dei servizi
 
@@ -171,7 +171,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod exec redis redis-
 Il droplet ha un clone di `dit-infra` in `/opt/dit`. Modifica viene **NON** auto-pullata. Quando aggiorni questo repo:
 
 ```bash
-ssh dit@165.22.30.42
+ssh dit@178.105.228.38
 cd /opt/dit
 git pull
 
@@ -204,10 +204,10 @@ I tag `v*` triggerano solo build (no deploy automatico): comodo per pubblicare r
 
 ### Secret GitHub usati (per ognuno dei 3 repo backend)
 
-| Secret           | Valore                                                                |
-| ---------------- | --------------------------------------------------------------------- |
-| `SSH_DEPLOY_KEY` | Chiave privata `ed25519` di un keypair dedicato (generato sul Mac)     |
-| `DROPLET_HOST`   | `165.22.30.42`                                                         |
+| Secret           | Valore                                                             |
+| ---------------- | ------------------------------------------------------------------ |
+| `SSH_DEPLOY_KEY` | Chiave privata `ed25519` di un keypair dedicato (generato sul Mac) |
+| `DROPLET_HOST`   | `178.105.228.38`                                                   |
 
 Il PAT `GITHUB_TOKEN` è automatico (ogni job lo riceve da GitHub Actions per push GHCR).
 
@@ -225,9 +225,9 @@ Per ruotare la chiave (se compromessa o periodicamente):
 ssh-keygen -t ed25519 -f ~/.ssh/dit-gha-deploy-new -N "" -C "github-actions-deploy@dit"
 
 # 2. Aggiungi public sul droplet, rimuovi vecchia
-cat ~/.ssh/dit-gha-deploy-new.pub | ssh dit@165.22.30.42 \
+cat ~/.ssh/dit-gha-deploy-new.pub | ssh dit@178.105.228.38 \
     'cat >> ~/.ssh/authorized_keys'
-ssh dit@165.22.30.42 "sed -i '/github-actions-deploy@dit$/d' ~/.ssh/authorized_keys"  # rimuove le vecchie
+ssh dit@178.105.228.38 "sed -i '/github-actions-deploy@dit$/d' ~/.ssh/authorized_keys"  # rimuove le vecchie
 
 # 3. Aggiorna SSH_DEPLOY_KEY su ognuno dei 3 repo GitHub:
 cat ~/.ssh/dit-gha-deploy-new | pbcopy
@@ -241,7 +241,7 @@ mv ~/.ssh/dit-gha-deploy-new.pub ~/.ssh/dit-gha-deploy.pub
 ### Rollback rapido a una versione precedente
 
 ```bash
-ssh dit@165.22.30.42
+ssh dit@178.105.228.38
 cd /opt/dit
 
 # Trova lo SHA dell'immagine precedente (cerca nei tag GHCR)
@@ -276,7 +276,7 @@ Lo script `scripts/backup-postgres.sh`:
 ### Backup manuale on-demand
 
 ```bash
-ssh dit@165.22.30.42
+ssh dit@178.105.228.38
 /opt/dit/scripts/backup-postgres.sh
 ```
 
@@ -285,7 +285,7 @@ ssh dit@165.22.30.42
 ⚠️ **DESTRUTTIVO** — sovrascrive il DB corrente.
 
 ```bash
-ssh dit@165.22.30.42
+ssh dit@178.105.228.38
 cd /opt/dit
 
 # Lista backup disponibili
@@ -486,66 +486,66 @@ Tutte le variabili sono in `.env.prod.example` con commenti. Ricapitolo per cate
 
 ### Domini & TLS
 
-| Variabile     | Esempio                          | Note                                          |
-| ------------- | -------------------------------- | --------------------------------------------- |
-| `DOMAIN_API`  | `dit-api.mariustrica.com`        | Caddy emette TLS automatica                   |
-| `DOMAIN_WS`   | `dit-ws.mariustrica.com`         | idem                                          |
-| `ACME_EMAIL`  | `you@mariustrica.com`            | Per notifiche di rinnovo Let's Encrypt        |
+| Variabile    | Esempio                   | Note                                   |
+| ------------ | ------------------------- | -------------------------------------- |
+| `DOMAIN_API` | `dit-api.mariustrica.com` | Caddy emette TLS automatica            |
+| `DOMAIN_WS`  | `dit-ws.mariustrica.com`  | idem                                   |
+| `ACME_EMAIL` | `you@mariustrica.com`     | Per notifiche di rinnovo Let's Encrypt |
 
 ### GHCR
 
-| Variabile         | Valore     |
-| ----------------- | ---------- |
-| `GHCR_USER`       | `tricaman` |
-| `DIT_API_TAG`     | `latest`   |
-| `DIT_PING_TAG`    | `latest`   |
-| `DIT_WORKER_TAG`  | `latest`   |
+| Variabile        | Valore     |
+| ---------------- | ---------- |
+| `GHCR_USER`      | `tricaman` |
+| `DIT_API_TAG`    | `latest`   |
+| `DIT_PING_TAG`   | `latest`   |
+| `DIT_WORKER_TAG` | `latest`   |
 
 ### Database / cache
 
-| Variabile           | Note                                                                             |
-| ------------------- | -------------------------------------------------------------------------------- |
-| `POSTGRES_USER`     | `dit` (default)                                                                  |
-| `POSTGRES_PASSWORD` | **random**, generata con `openssl rand -base64 36 \| tr -d '=+/' \| head -c 40`  |
-| `POSTGRES_DB`       | `dit` (default)                                                                  |
+| Variabile           | Note                                                                            |
+| ------------------- | ------------------------------------------------------------------------------- |
+| `POSTGRES_USER`     | `dit` (default)                                                                 |
+| `POSTGRES_PASSWORD` | **random**, generata con `openssl rand -base64 36 \| tr -d '=+/' \| head -c 40` |
+| `POSTGRES_DB`       | `dit` (default)                                                                 |
 
 `DATABASE_URL` e `REDIS_URL` sono **costruite automaticamente nel `docker-compose.prod.yml`** e iniettate nei container — non vanno settate in `.env.prod`.
 
 ### Secret applicativi
 
-| Variabile             | Generazione                  | Note                                                    |
-| --------------------- | ---------------------------- | ------------------------------------------------------- |
-| `JWT_SECRET`          | `openssl rand -hex 32`       | **DEVE coincidere** in `dit-api` e `dit-ping`           |
-| `BETTER_AUTH_SECRET`  | `openssl rand -hex 32`       |                                                         |
-| `TRUSTED_ORIGINS`     | `dit://,https://dit-api...`  | Origini accettate da BetterAuth (mobile + browser)      |
+| Variabile            | Generazione                 | Note                                               |
+| -------------------- | --------------------------- | -------------------------------------------------- |
+| `JWT_SECRET`         | `openssl rand -hex 32`      | **DEVE coincidere** in `dit-api` e `dit-ping`      |
+| `BETTER_AUTH_SECRET` | `openssl rand -hex 32`      |                                                    |
+| `TRUSTED_ORIGINS`    | `dit://,https://dit-api...` | Origini accettate da BetterAuth (mobile + browser) |
 
 ### Email (Brevo)
 
-| Variabile             | Esempio                          |
-| --------------------- | -------------------------------- |
-| `BREVO_API_KEY`       | `xkeysib-...`                    |
-| `BREVO_SENDER_EMAIL`  | `noreply@mariustrica.com`        |
+| Variabile            | Esempio                   |
+| -------------------- | ------------------------- |
+| `BREVO_API_KEY`      | `xkeysib-...`             |
+| `BREVO_SENDER_EMAIL` | `noreply@mariustrica.com` |
 
 Il dominio sender **deve essere verificato** in https://app.brevo.com/senders/domain/list (TXT/DKIM/DMARC).
 
 ### OAuth providers (tutti optional)
 
-| Variabile                  | Note                                                                 |
-| -------------------------- | -------------------------------------------------------------------- |
-| `GOOGLE_CLIENT_ID`         | Configurato. Callback: `https://dit-api.../auth/callback/google`     |
-| `GOOGLE_CLIENT_SECRET`     |                                                                       |
-| `FACEBOOK_APP_ID`          | (vuoto — non implementato lato client)                               |
-| `FACEBOOK_APP_SECRET`      |                                                                       |
-| `MICROSOFT_CLIENT_ID`      | (vuoto — idem)                                                       |
-| `MICROSOFT_CLIENT_SECRET`  |                                                                       |
-| `MICROSOFT_TENANT_ID`      | `common` (default)                                                   |
+| Variabile                 | Note                                                             |
+| ------------------------- | ---------------------------------------------------------------- |
+| `GOOGLE_CLIENT_ID`        | Configurato. Callback: `https://dit-api.../auth/callback/google` |
+| `GOOGLE_CLIENT_SECRET`    |                                                                  |
+| `FACEBOOK_APP_ID`         | (vuoto — non implementato lato client)                           |
+| `FACEBOOK_APP_SECRET`     |                                                                  |
+| `MICROSOFT_CLIENT_ID`     | (vuoto — idem)                                                   |
+| `MICROSOFT_CLIENT_SECRET` |                                                                  |
+| `MICROSOFT_TENANT_ID`     | `common` (default)                                               |
 
 Se in futuro implementi Facebook/Microsoft, basta valorizzare le var senza modificare il backend.
 
 ### Firebase (push notification)
 
-| Variabile                       | Formato                                                                                                                                                    |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Variabile                       | Formato                                                                                                                                                                                                                               |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | JSON **minified su una sola riga**. Letto da `dit-api` e `dit-worker` con `JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON)`. I `\n` nella `private_key` vanno mantenuti come escape literal `\n` (2 caratteri), NON come newline reali. |
 
 Per generarlo correttamente da un file scaricato da Firebase Console:
@@ -561,16 +561,16 @@ E poi metti il risultato come valore di `FIREBASE_SERVICE_ACCOUNT_JSON=<minified
 
 Tutti i seguenti hanno default sensati nel compose; puoi overridarli in `.env.prod`:
 
-| Variabile                       | Default | Significato                                       |
-| ------------------------------- | ------- | ------------------------------------------------- |
-| `PING_DEFAULT_TTL_SECONDS`      | `3600`  | TTL ping (1h)                                     |
-| `PING_MAX_TTL_SECONDS`          | `86400` | TTL massimo (24h)                                 |
-| `HUB_MAX_CONNECTIONS_PER_USER`  | `5`     | Max device connessi simultanei                    |
-| `AUTH_TIMEOUT_SECONDS`          | `5`     | Timeout autenticazione WS                         |
-| `HEARTBEAT_INTERVAL_SECONDS`    | `30`    | Ping/pong interval (sotto soglia CF 100s)         |
-| `HEARTBEAT_TIMEOUT_SECONDS`     | `60`    | Timeout heartbeat                                 |
-| `BULL_QUEUE_NAME`               | `notif` | Nome coda BullMQ (deve coincidere con dit-worker) |
-| `WORKER_CONCURRENCY`            | `10`    | Job paralleli del worker                          |
+| Variabile                      | Default | Significato                                       |
+| ------------------------------ | ------- | ------------------------------------------------- |
+| `PING_DEFAULT_TTL_SECONDS`     | `3600`  | TTL ping (1h)                                     |
+| `PING_MAX_TTL_SECONDS`         | `86400` | TTL massimo (24h)                                 |
+| `HUB_MAX_CONNECTIONS_PER_USER` | `5`     | Max device connessi simultanei                    |
+| `AUTH_TIMEOUT_SECONDS`         | `5`     | Timeout autenticazione WS                         |
+| `HEARTBEAT_INTERVAL_SECONDS`   | `30`    | Ping/pong interval (sotto soglia CF 100s)         |
+| `HEARTBEAT_TIMEOUT_SECONDS`    | `60`    | Timeout heartbeat                                 |
+| `BULL_QUEUE_NAME`              | `notif` | Nome coda BullMQ (deve coincidere con dit-worker) |
+| `WORKER_CONCURRENCY`           | `10`    | Job paralleli del worker                          |
 
 ---
 
@@ -656,7 +656,7 @@ done
 **Fix**: usa `systemctl --no-block reboot` (non blocca la sessione SSH e schedula il reboot in background):
 
 ```bash
-ssh root@165.22.30.42 "systemctl --no-block reboot"
+ssh root@178.105.228.38 "systemctl --no-block reboot"
 sleep 60   # aspetta che torni up
 ```
 
