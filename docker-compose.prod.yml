@@ -73,6 +73,11 @@ services:
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID}
       MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET}
       MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID}
+      # Sign in with Apple (native iOS). Comma-separated bundle identifiers,
+      # one per app variant. dit-api registers the Apple provider ONLY when
+      # this is non-empty — leave it out and every Apple sign-in fails with
+      # PROVIDER_NOT_FOUND, surfacing to the app as 401.
+      APPLE_APP_BUNDLE_IDS: ${APPLE_APP_BUNDLE_IDS:-}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON}
       # Reviewer backdoor (Play Store / App Store review only).
       # TODO(reviewer-backdoor): remove when Apple/Google no longer need a
