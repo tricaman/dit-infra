@@ -66,6 +66,16 @@ services:
       TRUSTED_ORIGINS: ${TRUSTED_ORIGINS}
       BREVO_API_KEY: ${BREVO_API_KEY}
       BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL}
+      # Email presentation — optional, dit-api has a default for each
+      # (src/common/email/brand.ts). Listed explicitly because this compose
+      # declares every variable: an unlisted one never reaches the container.
+      # Unset arrives as "" and is normalised back to the default.
+      EMAIL_SENDER_NAME: ${EMAIL_SENDER_NAME:-}
+      EMAIL_REPLY_TO: ${EMAIL_REPLY_TO:-}
+      EMAIL_BRAND_NAME: ${EMAIL_BRAND_NAME:-}
+      EMAIL_APP_URL: ${EMAIL_APP_URL:-}
+      EMAIL_SUPPORT_EMAIL: ${EMAIL_SUPPORT_EMAIL:-}
+      EMAIL_LOGO_URL: ${EMAIL_LOGO_URL:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       FACEBOOK_APP_ID: ${FACEBOOK_APP_ID}
