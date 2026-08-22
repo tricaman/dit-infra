@@ -64,6 +64,18 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: https://${DOMAIN_API}
       TRUSTED_ORIGINS: ${TRUSTED_ORIGINS}
+      # Email transport: ses | brevo | log. Unset arrives as "" and dit-api
+      # falls back to brevo, which is what ran here before SES.
+      EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      # Amazon SES (EMAIL_TRANSPORT=ses). NOT IAM access keys: these are the
+      # SMTP credentials from the SES console, and the password is derived
+      # per region — eu-central-1 here.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      # Brevo (EMAIL_TRANSPORT=brevo) — kept as rollback.
       BREVO_API_KEY: ${BREVO_API_KEY}
       BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL}
       # Email presentation — optional, dit-api has a default for each

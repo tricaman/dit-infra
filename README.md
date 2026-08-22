@@ -519,14 +519,27 @@ Tutte le variabili sono in `.env.prod.example` con commenti. Ricapitolo per cate
 | `BETTER_AUTH_SECRET` | `openssl rand -hex 32`      |                                                    |
 | `TRUSTED_ORIGINS`    | `dit://,https://dit-api...` | Origini accettate da BetterAuth (mobile + browser) |
 
-### Email (Brevo)
+### Email (Amazon SES)
 
-| Variabile            | Esempio                   |
-| -------------------- | ------------------------- |
-| `BREVO_API_KEY`      | `xkeysib-...`             |
-| `BREVO_SENDER_EMAIL` | `noreply@mariustrica.com` |
+| Variabile         | Esempio                                 |
+| ----------------- | --------------------------------------- |
+| `EMAIL_TRANSPORT` | `ses` (oppure `brevo` per il rollback)  |
+| `MAIL_FROM`       | `noreply@mydit.app`                     |
+| `SMTP_HOST`       | `email-smtp.eu-central-1.amazonaws.com` |
+| `SMTP_PORT`       | `587`                                   |
+| `SMTP_USER`       | `AKIA...`                               |
+| `SMTP_PASS`       | (dal CSV di SES, mostrata una volta)    |
 
-Il dominio sender **deve essere verificato** in https://app.brevo.com/senders/domain/list (TXT/DKIM/DMARC).
+Il dominio del mittente **deve essere un'identità verificata** in SES, con Easy
+DKIM e un MAIL FROM personalizzato (`mail.mydit.app`): senza quest'ultimo SPF
+non si allinea e DMARC regge sul solo DKIM.
+
+`SMTP_USER`/`SMTP_PASS` sono le credenziali SMTP generate dalla console SES,
+**non** le access key IAM, e la password è derivata per regione: vanno create
+con la console su eu-central-1.
+
+Rollback: `EMAIL_TRANSPORT=brevo` e riavvio. `BREVO_API_KEY` e
+`BREVO_SENDER_EMAIL` restano validi finché l'account Brevo non è disdetto.
 
 ### OAuth providers (tutti optional)
 
