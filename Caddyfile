@@ -46,3 +46,19 @@
         format console
     }
 }
+
+# ── Attenzione: in produzione questo file ha blocchi in più ────────────────
+# Sul droplet il Caddyfile ha in coda uno o più site block NON versionati,
+# aggiunti a mano per progetti che condividono questo host (oggi:
+# clash-bot.mariustrica.com). È una scelta deliberata — sono side project
+# piccoli, non valeva la pena portarli qui dentro. Le conseguenze però sono
+# reali, e tutte silenziose:
+#
+#   • `git pull` in /opt/dit fallisce finché quei blocchi ci sono. Procedura:
+#     salvali (`sed -n '/^# ── <Nome>/,$p' Caddyfile > /tmp/blocco`),
+#     `git checkout -- Caddyfile`, `git pull`, ri-appendili, poi valida.
+#   • `git checkout` / `git stash` / `git reset --hard` su questo file li
+#     cancella, e quei siti smettono di rispondere senza alcun errore.
+#   • Il "Setup completo da zero" del README NON li ricrea.
+#
+# Cosa c'è davvero in produzione, in un comando: `git diff Caddyfile`

@@ -338,6 +338,12 @@ In alternativa, abilita i **DigitalOcean Backups** del droplet (snapshot settima
 
 ## Setup completo da zero (disaster recovery)
 
+> ⚠️ **Questa procedura non ricrea i site block non versionati del Caddyfile.**
+> In produzione il file ha in coda blocchi aggiunti a mano per altri progetti
+> sullo stesso host (oggi `clash-bot.mariustrica.com`). Prima di ricostruire,
+> recuperali dall'ultimo backup del droplet o da `git diff Caddyfile`, e
+> ri-appendili dopo il clone. Il dettaglio è commentato nel `Caddyfile`.
+
 Se devi ricreare tutto da zero (droplet bruciato, region cambiata, ecc.):
 
 ### 1. Crea il droplet
@@ -541,8 +547,23 @@ esattamente come prima, le nuove vedono `mydit.app`.
 ### 1. DNS e Caddy in doppio host (additivo)
 
 ```
-A   api.mydit.app   →  <DROPLET_IP>   TTL: 300
-A   ws.mydit.app    →  <DROPLET_IP>   TTL: 300
+A   api.mydit.app   →  <DROPLET_IP>   TTL: 300   proxy: OFF
+A   ws.mydit.app    →  <DROPLET_IP>   TTL: 300   proxy: OFF
+```
+
+⚠️ **La zona `mydit.app` è su Cloudflare** (`mariustrica.com` è su Keliweb), e
+Cloudflare crea i record nuovi **proxati** per default — nuvola arancione. Vanno
+messi su **DNS only**, nuvola grigia, come i record storici.
+
+Col proxy attivo il TLS termina su Cloudflare e non su Caddy: il certificato
+Let's Encrypt che Caddy emette non lo vede nessuno, e il WebSocket passa per un
+hop in più con un idle timeout suo (~100s), sulla componente da cui dipende
+tutto il realtime. Finché Caddy non serve quel nome, un host proxato risponde
+`HTTP 525` — è il sintomo con cui si riconosce.
+
+```bash
+# nessun header cloudflare = proxy off, come dev'essere
+curl -sI https://ws.mydit.app/health | grep -i "^server\|^cf-ray"
 ```
 
 I record storici su `mariustrica.com` restano dove sono.
@@ -679,7 +700,7 @@ Tutte le variabili sono in `.env.prod.example` con commenti. Ricapitolo per cate
 | `DOMAIN_WS`         | `ws.mydit.app`            | idem                                        |
 | `DOMAIN_API_LEGACY` | `dit-api.mariustrica.com` | Host storico, stesso backend — vedi sopra   |
 | `DOMAIN_WS_LEGACY`  | `dit-ws.mariustrica.com`  | idem                                        |
-| `ACME_EMAIL`        | `you@mydit.app`           | Per notifiche di rinnovo Let's Encrypt      |
+| `ACME_EMAIL`        | `you@mydit.app`           | Avvisi Let's Encrypt. **Una casella letta davvero**: è l'unico allarme su un rinnovo fallito |
 
 ### GHCR
 
