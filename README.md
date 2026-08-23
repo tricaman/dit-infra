@@ -545,15 +545,54 @@ A   api.mydit.app   →  <DROPLET_IP>   TTL: 300
 A   ws.mydit.app    →  <DROPLET_IP>   TTL: 300
 ```
 
-I record storici su `mariustrica.com` restano dove sono. Poi, sul droplet:
-`git pull` di questo repo, aggiunta di `DOMAIN_API` / `DOMAIN_WS` /
-`DOMAIN_API_LEGACY` / `DOMAIN_WS_LEGACY` in `.env.prod`, e `TRUSTED_ORIGINS`
-con **entrambi** gli origin. Valida prima di applicare:
+I record storici su `mariustrica.com` restano dove sono.
+
+Sul droplet l'ordine conta, per due motivi che non si vedono:
+
+**`git pull` PRIMA di toccare `DOMAIN_API`.** Il compose vecchio deriva
+`BETTER_AUTH_URL: https://${DOMAIN_API}`. Cambiare `DOMAIN_API` senza aver
+prima aggiornato il compose significa che al successivo restart dit-api si
+ritrova una base URL *fissa* sul dominio nuovo — cioè esattamente lo scenario
+che rompe il login Google delle build già installate.
+
+**Poi fissa `BETTER_AUTH_URL` esplicitamente**, al valore che ha oggi. Col
+compose nuovo la variabile arriva da `.env.prod`, e lasciarla vuota attiva la
+derivazione per richiesta al primo restart di dit-api — che avviene da solo al
+prossimo push su `dit-api`. Fissandola, l'attivazione resta una decisione da
+prendere al passo 3, non un effetto collaterale.
+
+```bash
+cd /opt/dit && git pull
+```
+
+In `.env.prod`:
+
+```
+DOMAIN_API=api.mydit.app
+DOMAIN_WS=ws.mydit.app
+DOMAIN_API_LEGACY=dit-api.mariustrica.com
+DOMAIN_WS_LEGACY=dit-ws.mariustrica.com
+TRUSTED_ORIGINS=dit://,https://api.mydit.app,https://dit-api.mariustrica.com
+BETTER_AUTH_URL=https://dit-api.mariustrica.com   # pin temporaneo, si svuota al passo 3
+```
+
+Valida il Caddyfile prima di applicarlo — `run --rm` non pubblica le porte,
+quindi non tocca il Caddy in esecuzione:
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.prod \
-  run --rm --entrypoint caddy caddy validate --config /etc/caddy/Caddyfile
+  run --rm --entrypoint caddy caddy validate \
+  --config /etc/caddy/Caddyfile --adapter caddyfile
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d caddy
+```
+
+Solo `caddy`: dit-api resta com'è. Da qui i due domini nuovi servono REST e
+WebSocket in parallelo ai vecchi, e nulla è cambiato per nessuno.
+
+```bash
+for h in api.mydit.app dit-api.mariustrica.com; do
+  echo -n "$h  "; curl -s -o /dev/null -w "%{http_code}\n" "https://$h/auth/me"
+done   # 401 su entrambi
 ```
 
 ### 2. Console Google (additivo)
@@ -575,6 +614,16 @@ quinta le altre non hanno effetto, perché `getBaseURL` legge comunque
 | `betterauth.ts` | `baseURL: process.env['BETTER_AUTH_URL'] \|\| undefined` — il fallback `?? 'http://localhost:3000'` è truthy e disattiverebbe la derivazione |
 | `auth.controller.ts:141` e `:375` | `??` → `\|\|`: con la variabile a stringa vuota `??` non ricade su `getRequestBase()` e `new URL()` lancia |
 | `docker-compose.prod.yml` | `BETTER_AUTH_URL: ${BETTER_AUTH_URL:-}` al posto di `https://${DOMAIN_API}` |
+
+Il codice è arrivato in produzione col push, ma **inerte**: finché
+`BETTER_AUTH_URL` è valorizzata, BetterAuth usa quella e si comporta come
+prima. L'attivazione è svuotare il pin messo al passo 1:
+
+```bash
+# in .env.prod: BETTER_AUTH_URL=
+docker compose -f docker-compose.prod.yml --env-file .env.prod \
+  up -d --no-deps --force-recreate dit-api
+```
 
 ### 4. Cancello: login Google verificato su entrambi gli host
 
@@ -658,6 +707,7 @@ Tutte le variabili sono in `.env.prod.example` con commenti. Ricapitolo per cate
 | `JWT_SECRET`         | `openssl rand -hex 32`      | **DEVE coincidere** in `dit-api` e `dit-ping`      |
 | `BETTER_AUTH_SECRET` | `openssl rand -hex 32`      |                                                    |
 | `TRUSTED_ORIGINS`    | `dit://,https://api.mydit.app,https://dit-api...` | Origini accettate da BetterAuth (mobile + browser). Include l'host legacy |
+| `BETTER_AUTH_URL`    | *(vuota)*                   | Vuota = base URL derivata per richiesta dall'host. Valorizzarla fissa un'origine sola: è la leva di rollback del cutover |
 
 ### Email (Amazon SES)
 
@@ -678,8 +728,21 @@ non si allinea e DMARC regge sul solo DKIM.
 **non** le access key IAM, e la password è derivata per regione: vanno create
 con la console su eu-central-1.
 
-Rollback: `EMAIL_TRANSPORT=brevo` e riavvio. `BREVO_API_KEY` e
-`BREVO_SENDER_EMAIL` restano validi finché l'account Brevo non è disdetto.
+> **Ricostruendo l'ambiente da zero**: l'account SES dev'essere fuori dalla
+> sandbox prima di puntarci il traffico. In sandbox si scrive solo a indirizzi
+> verificati, 200 al giorno — ogni OTP verso un utente reale fallirebbe. Non
+> riguarda l'ambiente attuale, che è già in produzione su SES.
+
+**Rollback: `EMAIL_TRANSPORT=brevo` e riavvio di `dit-api`.** Le credenziali dei
+due provider convivono nello stesso `.env.prod` e il boot valida **solo quelle
+del transport selezionato** (`config.module.ts`, `superRefine`), quindi Brevo
+resta una via di ritorno immediata finché l'account non è disdetto. Nessun
+redeploy, nessun cambio di codice.
+
+Il transport è letto in due punti — lo schema di `config.module.ts` e
+`getTransport()` in `common/email/mailer.ts`, che legge `process.env` diretto.
+Le due mappature devono restare identiche, o il boot valida un provider mentre
+un altro fa gli invii: `config.module.spec.ts` lo blocca.
 
 ### OAuth providers (tutti optional)
 

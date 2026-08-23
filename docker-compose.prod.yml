@@ -69,7 +69,13 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
-      BETTER_AUTH_URL: https://${DOMAIN_API}
+      # Deliberatamente vuoto. Senza questa variabile BetterAuth ricava la
+      # base URL per richiesta dall'host in arrivo, cosi' un login iniziato
+      # sull'host legacy ci ritorna: il cookie `state` di OAuth e' legato
+      # all'host, e una base URL fissa manderebbe la callback sull'altro
+      # dominio, dove quel cookie non esiste. Valorizzarla fissa un'origine
+      # sola — e' la leva di rollback del cutover.
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-}
       TRUSTED_ORIGINS: ${TRUSTED_ORIGINS}
       # Email transport: ses | brevo | log. Unset arrives as "" and dit-api
       # falls back to brevo, which is what ran here before SES.
