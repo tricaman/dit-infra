@@ -13,6 +13,13 @@ services:
     environment:
       DOMAIN_API: ${DOMAIN_API}
       DOMAIN_WS: ${DOMAIN_WS}
+      # Host storici, serviti in parallelo a quelli correnti perché le build
+      # già distribuite li hanno compilati dentro (EXPO_PUBLIC_API_URL /
+      # EXPO_PUBLIC_WS_URL) e non c'è force-update. Il Caddyfile ha gli stessi
+      # default: qui sono espliciti perché una variabile non dichiarata non
+      # raggiunge mai il container.
+      DOMAIN_API_LEGACY: ${DOMAIN_API_LEGACY:-dit-api.mariustrica.com}
+      DOMAIN_WS_LEGACY: ${DOMAIN_WS_LEGACY:-dit-ws.mariustrica.com}
       ACME_EMAIL: ${ACME_EMAIL}
     depends_on:
       - dit-api

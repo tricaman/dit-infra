@@ -13,6 +13,7 @@ Questo repo contiene **solo** l'orchestrazione (compose, Caddyfile, script). Il 
 - [CI/CD: auto-deploy](#cicd-auto-deploy)
 - [Backup & restore PostgreSQL](#backup--restore-postgresql)
 - [Setup completo da zero (disaster recovery)](#setup-completo-da-zero-disaster-recovery)
+- [Cambio di dominio (cutover)](#cambio-di-dominio-cutover)
 - [Variabili `.env.prod`](#variabili-envprod)
 - [Troubleshooting / lessons learned](#troubleshooting--lessons-learned)
 
@@ -33,7 +34,7 @@ Questo repo contiene **solo** l'orchestrazione (compose, Caddyfile, script). Il 
         ┌──────────────────────────┼──────────────────────────┐
         │                          │                          │
         ▼                          ▼                          │
-  dit-api.mariustrica.com    dit-ws.mariustrica.com/ws        │
+  api.mydit.app             ws.mydit.app/ws                   │
         │                          │                          │
         ▼                          ▼                          │
   ┌──────────┐              ┌──────────┐                      │
@@ -84,17 +85,42 @@ Volumes: pgdata, redis_data, caddy_data, caddy_config (named volumes Docker).
 
 ## Endpoint pubblici
 
-| URL                                         | Servizio | Note                                   |
-| ------------------------------------------- | -------- | -------------------------------------- |
-| `https://dit-api.mariustrica.com/`          | dit-api  | Hello world (default NestJS)           |
-| `https://dit-api.mariustrica.com/docs`      | dit-api  | Swagger UI                             |
-| `https://dit-api.mariustrica.com/auth/...`  | dit-api  | BetterAuth (Google OAuth, email + OTP) |
-| `https://dit-api.mariustrica.com/users/...` | dit-api  | API REST                               |
-| `wss://dit-ws.mariustrica.com/ws`           | dit-ping | WebSocket (auth via JWT shared secret) |
+| URL                                  | Servizio | Note                                   |
+| ------------------------------------ | -------- | -------------------------------------- |
+| `https://api.mydit.app/`             | dit-api  | Hello world (default NestJS)           |
+| `https://api.mydit.app/docs`         | dit-api  | Swagger UI                             |
+| `https://api.mydit.app/auth/...`     | dit-api  | BetterAuth (Google OAuth, email + OTP) |
+| `https://api.mydit.app/users/...`    | dit-api  | API REST                               |
+| `wss://ws.mydit.app/ws`              | dit-ping | WebSocket (auth via JWT shared secret) |
+
+### Host legacy (mariustrica.com)
+
+Prima di `mydit.app` l'infra stava su `dit-api.mariustrica.com` e
+`dit-ws.mariustrica.com`. Quei due host **restano serviti** dallo stesso Caddy,
+sullo stesso backend: l'URL dell'API è compilata dentro il binario dell'app
+(`EXPO_PUBLIC_API_URL` / `EXPO_PUBLIC_WS_URL` in `dit-mobile/eas.json`) e dit
+non ha un meccanismo di force-update, quindi ogni installazione anteriore al
+cambio continua a chiamare il vecchio host finché l'utente non aggiorna.
+
+Sono configurati via `DOMAIN_API_LEGACY` / `DOMAIN_WS_LEGACY`. Per ritirarli
+servono **entrambe** le cose: togliere le variabili (o gli indirizzi dal
+`Caddyfile`) **e** i record DNS — non prima che le build che li referenziano
+siano fuori uso.
 
 ### OAuth callback registrati
 
-- Google: `https://dit-api.mariustrica.com/auth/callback/google`
+- Google: `https://api.mydit.app/auth/callback/google`
+- Google (legacy): `https://dit-api.mariustrica.com/auth/callback/google`
+
+**Servono entrambi, contemporaneamente.** Il `baseURL` di BetterAuth non è
+fisso: è derivato per richiesta dall'host in arrivo (vedi "Cambio di dominio"),
+quindi un login che parte dall'host legacy ci ritorna, e uno che parte dal
+dominio nuovo resta sul nuovo. Togliere il redirect vecchio rompe il login
+Google di ogni build già installata.
+
+> È il redirect a decidere il dominio mostrato dalla schermata "Scegli un
+> account" di Google (`Continua su ...`). Le build nuove leggono `mydit.app`,
+> quelle vecchie continuano a leggere `mariustrica.com` — ed è corretto così.
 
 (Facebook e Microsoft non sono implementati lato client, ma le env var sono opzionali e supportabili in futuro senza modifiche backend — basta registrare il provider e settare le credenziali in `.env.prod`.)
 
@@ -332,6 +358,14 @@ Annota l'IP: `<DROPLET_IP>`.
 Sul registrar (Keliweb nel nostro caso):
 
 ```
+A   api.mydit.app   →  <DROPLET_IP>   TTL: 300
+A   ws.mydit.app    →  <DROPLET_IP>   TTL: 300
+```
+
+Sulla zona `mariustrica.com` restano attivi anche i record storici, che devono
+continuare a puntare allo stesso droplet (vedi "Host legacy" sopra):
+
+```
 A   dit-api.mariustrica.com   →  <DROPLET_IP>   TTL: 300
 A   dit-ws.mariustrica.com    →  <DROPLET_IP>   TTL: 300
 ```
@@ -339,8 +373,8 @@ A   dit-ws.mariustrica.com    →  <DROPLET_IP>   TTL: 300
 ⚠️ Assicurati che **non** ci siano altri record A duplicati (vecchio IP dimenticato, wildcard `*` inadeguato). Verifica:
 
 ```bash
-dig @8.8.8.8 +short dit-api.mariustrica.com
-dig @8.8.8.8 +short dit-ws.mariustrica.com
+dig @8.8.8.8 +short api.mydit.app
+dig @8.8.8.8 +short ws.mydit.app
 # Devono restituire SOLO <DROPLET_IP>.
 ```
 
@@ -451,8 +485,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod ps
 Caddy emette automaticamente i certificati Let's Encrypt al primo accesso HTTPS. Verifica:
 
 ```bash
-curl -I https://dit-api.mariustrica.com/
-curl -I https://dit-api.mariustrica.com/docs
+curl -I https://api.mydit.app/
+curl -I https://api.mydit.app/docs
 ```
 
 ### 9. Schedula backup giornaliero
@@ -480,17 +514,123 @@ gunzip -c backups/dit-2026XXXX.sql.gz \
 
 ---
 
+## Cambio di dominio (cutover)
+
+Runbook della migrazione `mariustrica.com` → `mydit.app` (agosto 2026). Vale
+per qualsiasi cambio futuro dei sottodomini.
+
+### Il vincolo che detta l'ordine
+
+Servire i vecchi host da Caddy copre REST e WebSocket delle build già
+pubblicate, ma **non basta per il login Google**.
+
+BetterAuth costruisce il `redirect_uri` dal proprio `baseURL`, mentre il cookie
+firmato `state` viene scritto sull'host che **avvia** il flusso — e
+`crossSubDomainCookies` è disattivato. Con un `baseURL` fisso puntato al
+dominio nuovo, una build vecchia parte da `dit-api.mariustrica.com`, Google la
+rimanda su `api.mydit.app/auth/callback/google`, il cookie non c'è, e il login
+muore con `state_security_mismatch`.
+
+La soluzione **non** è spostare `BETTER_AUTH_URL`: è toglierlo. Senza
+`baseURL` statico BetterAuth lo ricalcola a ogni richiesta dall'host in arrivo
+(`better-auth/dist/auth/base.mjs`, ramo `if (!ctx.options.baseURL)`), e
+`dispatchToBetterAuth` in `auth.controller.ts` gli passa già l'host reale. Ogni
+flusso resta coerente sul proprio dominio: le build vecchie si comportano
+esattamente come prima, le nuove vedono `mydit.app`.
+
+### 1. DNS e Caddy in doppio host (additivo)
+
+```
+A   api.mydit.app   →  <DROPLET_IP>   TTL: 300
+A   ws.mydit.app    →  <DROPLET_IP>   TTL: 300
+```
+
+I record storici su `mariustrica.com` restano dove sono. Poi, sul droplet:
+`git pull` di questo repo, aggiunta di `DOMAIN_API` / `DOMAIN_WS` /
+`DOMAIN_API_LEGACY` / `DOMAIN_WS_LEGACY` in `.env.prod`, e `TRUSTED_ORIGINS`
+con **entrambi** gli origin. Valida prima di applicare:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod \
+  run --rm --entrypoint caddy caddy validate --config /etc/caddy/Caddyfile
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d caddy
+```
+
+### 2. Console Google (additivo)
+
+Aggiungi il redirect URI del dominio nuovo **senza togliere quello vecchio**, e
+`mydit.app` fra gli authorized domains. Va fatto prima del passo 3: appena
+l'API inizia a mandare Google sul callback nuovo, quel redirect dev'essere già
+registrato, o è `redirect_uri_mismatch` per tutti.
+
+### 3. dit-api: `baseURL` per richiesta
+
+Cinque modifiche. Le prime quattro nel codice, la quinta qui — e senza la
+quinta le altre non hanno effetto, perché `getBaseURL` legge comunque
+`BETTER_AUTH_URL` dall'ambiente.
+
+| File | Modifica |
+| ---- | -------- |
+| `config.module.ts` | `BETTER_AUTH_URL: z.url()` → `.optional()`, altrimenti il boot fallisce la validazione |
+| `betterauth.ts` | `baseURL: process.env['BETTER_AUTH_URL'] \|\| undefined` — il fallback `?? 'http://localhost:3000'` è truthy e disattiverebbe la derivazione |
+| `auth.controller.ts:141` e `:375` | `??` → `\|\|`: con la variabile a stringa vuota `??` non ricade su `getRequestBase()` e `new URL()` lancia |
+| `docker-compose.prod.yml` | `BETTER_AUTH_URL: ${BETTER_AUTH_URL:-}` al posto di `https://${DOMAIN_API}` |
+
+### 4. Cancello: login Google verificato su entrambi gli host
+
+Login Google reale, end-to-end, **due volte**: una da una build che punta
+all'host legacy, una da una che punta al dominio nuovo. Entrambe devono
+arrivare al deep link con `session_token`.
+
+Se fallisce quella legacy, la regressione colpisce gli utenti già installati.
+**Rollback immediato**, senza toccare il codice: rimetti
+`BETTER_AUTH_URL=https://dit-api.mariustrica.com` in `.env.prod` e riavvia
+`dit-api`. Il valore esplicito ha la precedenza sulla derivazione e tutto torna
+come prima.
+
+### 5. dit-admin e mobile
+
+`PUBLIC_API_BASE_URL` nelle env di Vercel, poi redeploy. Gli admin già loggati
+rifanno login una volta: la sessione browser è un cookie sull'origine dell'API,
+ed è cambiata.
+
+Le build mobile vanno fatte **solo dopo il cancello**: `eas.json` punta già ai
+domini nuovi, e pubblicare prima significherebbe rilasciare una versione il cui
+login non è ancora stato verificato.
+
+### Cosa non si rompe
+
+- **Le sessioni mobile.** L'app non usa il cookie jar di piattaforma: persiste
+  il session token e lo rigioca come header `Cookie` su qualsiasi host
+  (`dit-mobile/src/services/api.ts`). Nessuno viene sloggato.
+- **Le build già pubblicate**, comprese quelle in revisione sugli store:
+  parlano con l'host legacy, che dopo il passo 3 si comporta identico a prima.
+- **Il bundle id.** `com.mariustrica.dit` è la chiave delle app pubblicate
+  sugli store: non segue il dominio, e non è visibile all'utente da nessuna
+  parte.
+
+### Da non fare
+
+- Togliere i record DNS su `mariustrica.com`, o gli host legacy dal `Caddyfile`.
+- Rimuovere il vecchio redirect URI dalla console Google.
+- Reimpostare `BETTER_AUTH_URL` a un valore fisso dopo il passo 3, se non come
+  rollback voluto.
+
+---
+
 ## Variabili `.env.prod`
 
 Tutte le variabili sono in `.env.prod.example` con commenti. Ricapitolo per categoria:
 
 ### Domini & TLS
 
-| Variabile    | Esempio                   | Note                                   |
-| ------------ | ------------------------- | -------------------------------------- |
-| `DOMAIN_API` | `dit-api.mariustrica.com` | Caddy emette TLS automatica            |
-| `DOMAIN_WS`  | `dit-ws.mariustrica.com`  | idem                                   |
-| `ACME_EMAIL` | `you@mariustrica.com`     | Per notifiche di rinnovo Let's Encrypt |
+| Variabile           | Esempio                   | Note                                        |
+| ------------------- | ------------------------- | ------------------------------------------- |
+| `DOMAIN_API`        | `api.mydit.app`           | Caddy emette TLS automatica                 |
+| `DOMAIN_WS`         | `ws.mydit.app`            | idem                                        |
+| `DOMAIN_API_LEGACY` | `dit-api.mariustrica.com` | Host storico, stesso backend — vedi sopra   |
+| `DOMAIN_WS_LEGACY`  | `dit-ws.mariustrica.com`  | idem                                        |
+| `ACME_EMAIL`        | `you@mydit.app`           | Per notifiche di rinnovo Let's Encrypt      |
 
 ### GHCR
 
@@ -517,7 +657,7 @@ Tutte le variabili sono in `.env.prod.example` con commenti. Ricapitolo per cate
 | -------------------- | --------------------------- | -------------------------------------------------- |
 | `JWT_SECRET`         | `openssl rand -hex 32`      | **DEVE coincidere** in `dit-api` e `dit-ping`      |
 | `BETTER_AUTH_SECRET` | `openssl rand -hex 32`      |                                                    |
-| `TRUSTED_ORIGINS`    | `dit://,https://dit-api...` | Origini accettate da BetterAuth (mobile + browser) |
+| `TRUSTED_ORIGINS`    | `dit://,https://api.mydit.app,https://dit-api...` | Origini accettate da BetterAuth (mobile + browser). Include l'host legacy |
 
 ### Email (Amazon SES)
 
@@ -645,16 +785,16 @@ COPY --from=builder /app/prisma.config.ts ./
 
 ### DNS: cache pubblica restituisce vecchio IP
 
-**Sintomo**: dopo aver cambiato IP del droplet, `dig @8.8.8.8 +short dit-XX.mariustrica.com` restituisce ancora il vecchio IP per molto tempo.
+**Sintomo**: dopo aver cambiato IP del droplet, `dig @8.8.8.8 +short XX.mydit.app` restituisce ancora il vecchio IP per molto tempo.
 
 **Causa**: TTL alto (es. 14400 = 4h). Anche se i nameserver autoritativi (Keliweb) sono già aggiornati, le cache pubbliche (Google DNS, ISP) continuano a restituire il vecchio finché il TTL non scade.
 
 **Verifica autoritativa**:
 
 ```bash
-for ns in $(dig NS mariustrica.com +short); do
+for ns in $(dig NS mydit.app +short); do
   echo "[$ns]"
-  dig @$ns +short dit-ws.mariustrica.com
+  dig @$ns +short ws.mydit.app
 done
 ```
 
