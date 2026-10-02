@@ -15,6 +15,16 @@ if [ ! -f .env.prod ]; then
     exit 1
 fi
 
+# Editing .env.prod as root (sudo sed -i, sudo nano) recreates it as root:root
+# 600, and every deploy run as dit (CI included) then dies inside compose with
+# "open .env.prod: permission denied", easy to miss in a CI log. Fail early
+# with the fix instead.
+if [ ! -r .env.prod ]; then
+    echo "ERROR: .env.prod is not readable by $(id -un) (owner: $(stat -c %U:%G .env.prod 2>/dev/null || stat -f %Su:%Sg .env.prod))." >&2
+    echo "Fix as root: chown dit:dit $(pwd)/.env.prod && chmod 600 $(pwd)/.env.prod" >&2
+    exit 1
+fi
+
 COMPOSE="docker compose -f docker-compose.prod.yml --env-file .env.prod"
 SERVICE="${1:-}"
 

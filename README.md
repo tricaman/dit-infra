@@ -910,6 +910,30 @@ awk '/^FIREBASE_SERVICE_ACCOUNT_JSON=/{print "length="length($0)}' /opt/dit/.env
 # Atteso: ~2300-2500 caratteri su una sola riga
 ```
 
+### `open /opt/dit/.env.prod: permission denied`
+
+**Symptom**: `docker compose ... --env-file .env.prod` fails as `dit`, and so does every CI deploy (`deploy.sh` now stops early with an explicit message). From 2026-09-12 to 2026-10-01 this silently kept dit-api on a stale image.
+
+**Cause**: `.env.prod` was edited as root (`sudo sed -i`, `sudo nano`, or a root shell). `sed -i` recreates the file owned by whoever runs it, so it became `root:root 600`.
+
+**Fix**: edit `.env.prod` as `dit`. If it already happened:
+
+```bash
+ssh root@178.105.228.38 'chown dit:dit /opt/dit/.env.prod && chmod 600 /opt/dit/.env.prod'
+```
+
+### iOS push: `Invalid APNs credential.`
+
+**Symptom**: Android pushes arrive, iOS ones never do. dit-worker logs `FCM send failed` (single sends) or `FCM multicast tokens failed` (broadcasts) with `Invalid APNs credential.` / `messaging/third-party-auth-error`.
+
+**Cause**: the APNs auth key in the Firebase console (project `dit-prod-3e6a7`, Cloud Messaging, app `com.mariustrica.dit`) is revoked, belongs to another Apple team, or was entered with the wrong Key ID / Team ID. Team is `XFS75S4BYM`.
+
+**Fix**: upload a valid `.p8` with its Key ID and Team ID `XFS75S4BYM`. To check a key without delivering anything, POST to `https://api.push.apple.com/3/device/<64 zeros>` with an ES256 JWT (`kid` = Key ID, `iss` = Team ID) and `apns-topic: com.mariustrica.dit`: `400 BadDeviceToken` means the key is valid, `403 InvalidProviderToken` means it is not.
+
+```bash
+ssh dit@178.105.228.38 'docker logs --since 24h dit-dit-worker-1 2>&1 | grep -E "send failed|tokens failed"'
+```
+
 ### Bot scan dei log Caddy (`/setup.php`, `/_internal/api/setup.php`)
 
 **Sintomo**: log di Caddy pieni di richieste tipo `GET /setup/`, `POST /_internal/api/setup.php?action=exists`.
